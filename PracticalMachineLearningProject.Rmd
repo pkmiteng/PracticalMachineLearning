@@ -1,0 +1,78 @@
+---
+title: "Practical Machine Learning Project"
+author: "Paresh Kumar Mishra"
+date: "21 Sep, 2014"
+output: 
+  html_document:
+    toc: true
+    theme: spacelab
+---
+## Introduction
+This project is the final project of the practical machine learning course n the Data Science specialization of Coursera.
+In the below document I have explained my analysis.
+This document describes the analysis I conducted for my final project for the Johns Hopkins' Coursera course "Practical Machine Learning" in the Data Science specialization.  You can learn more about the course [here](https://www.coursera.org/course/predmachlearn).
+[RStudio](http://www.rstudio.com) was used for conducting all of the project work.  
+
+##Data Collection
+I have downloaded the data for the  assignment from [here](http://groupware.les.inf.puc-rio.br/har). I have split the data into a training group (19,622) observations and testing group (20 observations).    
+
+## Methods Used
+First, training set is split into 90/10 smaller samples.  
+```{r}
+set.seed(614)
+library(lattice); library(ggplot2); library(caret)
+pml.training <- read.csv("C:/Users/pkmiteng/PracticalMachineLearning/pml-training.csv")
+inTrain <- createDataPartition(y=pml.training$classe, p=0.9, list=FALSE)
+training <- pml.training[inTrain,]
+testing <- pml.training[-inTrain,]
+```
+Note: To run this code, the data inside `read.csv("")` is switched to the location of the data.   The  10 percent sample is used for cross-validation.  I did this simple cross-validation  to cut down on execution time.
+Next, I implement a Stochastic Gradient Boosting algorithm via the `gbm` package.
+```{r}
+ptm <- proc.time()
+modFit <- train(classe ~ user_name + pitch_arm + yaw_arm + roll_arm + roll_belt + pitch_belt + yaw_belt + gyros_belt_x + gyros_belt_y + gyros_belt_z + accel_belt_x + accel_belt_y + accel_belt_z + magnet_belt_x + magnet_belt_y + magnet_belt_z + gyros_arm_x + gyros_arm_y + gyros_arm_z + accel_arm_x + accel_arm_y + accel_arm_z + magnet_arm_x + magnet_arm_y + magnet_arm_z + roll_dumbbell + pitch_dumbbell + yaw_dumbbell, method="gbm", data=training, verbose=FALSE)
+proc.time() - ptm
+```
+ I've used `ptm` and `proc.time()` to record the time taken for execution. It was found to be approximately 24 minutes.
+```{r}
+print(modFit)
+predictTr <- predict(modFit,training)
+table(predictTr, training$classe)
+```
+The model correctly classifies 93.6 percent of the observations in the training sample.  The "roll_belt"" and "yaw_belt"" features were by far the most important in terms of variable influence.  
+```{r}
+summary(modFit,n.trees=150)
+```
+
+A plot of these top two features colored by outcome demonstrates their relative importance.  
+```{r}
+qplot(roll_belt, yaw_belt,colour=classe,data=training)
+```
+Even though these are the top features, they're still not great predictors in their own right.  Nonetheless, you can see some bunching in this simple plot.  This confirms the choice of a boosting algorithm as a good choice given the large set of relatively weak predictors.  This next plot further demonstrates the improved performance gained by using boosting iterations.
+
+```{r}
+ggplot(modFit)
+```
+
+Next, I check the performance on the 10 percent subsample to get an estimate of the algorithm's out-of-sample performance.
+```{r}
+predictTe <- predict(modFit,testing)
+table(predictTe, testing$classe)
+```
+The accuracy of the result of the algorithm is slightly below in the testing subset than it did on the full training set, correctly classifying 93.4 percent of the observations.
+
+## Predicting on the Test Set
+Finally, I use the algorithm to predict using the testing set.  The results are run through the `pml_write_files()` function from the course Coursera site, and stored for submission.  
+```{r}
+pml.testing <- read.csv("C:/Users/pkmiteng/PracticalMachineLearning/pml-testing.csv")
+answers <- as.character(predict(modFit, pml.testing))
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+pml_write_files(answers)
+```
+After submitting these answers, it turns out that the algorithm correctly predicted the outcome for 20/20 observations further confirming its strong out-of-sample classification accuracy.  
